@@ -23,6 +23,6 @@
   display: inline-block;
 } */
 .completed {
-  text-decoration: line-through;
-  color: gray;
+  text-decoration: line-through !important; /* Gạch ngang chữ */
+  color: gray !important; /* Màu chữ xám khi hoàn thành */
 }

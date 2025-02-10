@@ -9,16 +9,13 @@ function App() {
   const [textInput, setTextInput] = useState("");
 
   useEffect(() => {
-    axios.get('http://localhost:5000/api/data') // Đảm bảo URL trùng khớp với API backend
-    .then(response => {
-      setData(response.data); // Lưu dữ liệu vào state
-    })
-    .catch(error => {
-      console.error('Lỗi khi lấy dữ liệu:', error);
-    });
-    
-    axios.get("http://localhost:5000/api/todos").then((res) => setTodoList(res.data));
+
+    axios
+      .get("http://localhost:5000/api/todos")
+      .then((res) => setTodoList(res.data))
+      .catch((error) => console.error("Lỗi khi lấy danh sách todos:", error));
   }, []);
+  
   const addTodo = () => {
     axios.post("http://localhost:5000/api/todos", { title: textInput, status: 0 }).then((res) => {
       setTodoList([...todoList, { id: res.data.id, title: textInput, status: 0 }]);
@@ -27,11 +24,10 @@ function App() {
   };
   
 
-  const toggleStatus = (id, status) => {
-    axios.put(`http://localhost:5000/api/todos/${id}`, { status: status ? 0 : 1 }).then(() => {
-      setTodoList(todoList.map(todo => todo.id === id ? { ...todo, status: status ? 0 : 1 } : todo));
-    });
+  const toggleStatus = (id, newStatus) => {
+    setTodoList(todoList.map(todo => todo.id === id ? { ...todo, status: newStatus } : todo));
   };
+  
   
   const onTextInputChange = useCallback((e) => {
     setTextInput(e.target.value);

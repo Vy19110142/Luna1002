@@ -41,22 +41,7 @@ const poolPromise = new sql.ConnectionPool(config)
     process.exit(1);
   });
 module.exports = { sql, poolPromise };
-// Hàm kết nối SQL Server
-// const connectToDatabase = () => {
-//   return new Promise((resolve, reject) => {
-//     const connection = new tedious.Connection(config);
-//     connection.on('connect', (err) => {
-//       if (err) {
-//         console.error('Lỗi kết nối SQL Server:', err);
-//         reject(err);
-//       } else {
-//         console.log('✅ Kết nối SQL Server thành công');
-//         resolve(connection);
-//       }
-//     });
-//     connection.on('error', reject);
-//   });
-// };
+
 
 app.get('/', (req, res) => {
   res.send('Hello, World!');
@@ -71,111 +56,56 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-
-// **[GET] Lấy danh sách todos**
 app.get('/api/todos', async (req, res) => {
   try {
-    const connection = await connectToDatabase();
-    const request = new tedious.Request("SELECT id, title, status FROM dbo.Luna1002", (err, rowCount, rows) => {
-      if (err) {
-        console.error('Lỗi truy vấn:', err);
-        res.status(500).json({ error: 'Lỗi truy vấn dữ liệu' });
-      } else {
-        const data = rows.map(row => {
-          const obj = {};
-          row.forEach(column => obj[column.metadata.colName] = column.value);
-          return obj;
-        });
-        res.json(data);
-      }
-      connection.close();
-    });
-    connection.execSql(request);
-  } catch (error) {
-    console.error("Lỗi kết nối hoặc truy vấn:", error);
-    res.status(500).json({ error: 'Lỗi kết nối hoặc truy vấn' });
+    const pool = await poolPromise;
+    const result = await pool.request().query("SELECT id, title, status FROM dbo.Luna1002");
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('Lỗi truy vấn:', err);
+    res.status(500).send('Lỗi truy vấn dữ liệu: ' + err.message);
   }
 });
 
-// **[POST] Thêm một todo mới**
 app.post('/api/todos', async (req, res) => {
   const { title, status } = req.body;
+  
   try {
-    const connection = await connectToDatabase();
-    const request = new tedious.Request(
-      `INSERT INTO dbo.Luna1002 (title, status) OUTPUT INSERTED.id VALUES (@title, @status)`,
-      (err, rowCount, rows) => {
-        if (err) {
-          console.error('Lỗi tạo todo:', err);
-          res.status(500).json({ error: 'Lỗi tạo todo' });
-        } else {
-          const id = rows[0][0].value;
-          res.status(201).json({ id, message: 'Todo đã được tạo thành công' });
-        }
-        connection.close();
-      }
-    );
-    request.addParameter('title', tedious.TYPES.NVarChar, title);
-    request.addParameter('status', tedious.TYPES.NVarChar, status);
-    connection.execSql(request);
-  } catch (error) {
-    console.error("Lỗi kết nối hoặc tạo todo:", error);
-    res.status(500).json({ error: 'Lỗi kết nối hoặc tạo todo' });
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input('title', sql.NVarChar, title)
+      .input('status', sql.Int, status) // status nên là kiểu Int nếu chỉ có 0 hoặc 1
+      .query("INSERT INTO dbo.Luna1002 (title, status) OUTPUT INSERTED.id VALUES (@title, @status)");
+
+    res.status(201).json({ id: result.recordset[0].id, message: 'Todo đã được tạo thành công' });
+  } catch (err) {
+    console.error("Lỗi khi thêm todo:", err);
+    res.status(500).json({ error: 'Lỗi khi thêm todo: ' + err.message });
   }
 });
 
-// **[PUT] Cập nhật todo**
 app.put('/api/todos/:id', async (req, res) => {
-  const { title, status } = req.body;
   const { id } = req.params;
+
   try {
-    const connection = await connectToDatabase();
-    const request = new tedious.Request(
-      `UPDATE dbo.Luna1002 SET title = @title, status = @status WHERE id = @id`,
-      (err, rowCount) => {
-        if (err) {
-          console.error('Lỗi cập nhật todo:', err);
-          res.status(500).json({ error: 'Lỗi cập nhật todo' });
-        } else {
-          res.json({ message: 'Todo đã được cập nhật' });
-        }
-        connection.close();
-      }
-    );
-    request.addParameter('title', tedious.TYPES.NVarChar, title);
-    request.addParameter('status', tedious.TYPES.NVarChar, status);
-    request.addParameter('id', tedious.TYPES.Int, id);
-    connection.execSql(request);
-  } catch (error) {
-    console.error("Lỗi kết nối hoặc cập nhật todo:", error);
-    res.status(500).json({ error: 'Lỗi kết nối hoặc cập nhật todo' });
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input('id', sql.Int, id)
+      .query("UPDATE dbo.Luna1002 SET status = 1 WHERE id = @id");
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Todo không tồn tại" });
+    }
+
+    res.json({ message: "Todo đã được cập nhật thành công" });
+  } catch (err) {
+    console.error("Lỗi khi cập nhật todo:", err);
+    res.status(500).json({ error: "Lỗi khi cập nhật todo: " + err.message });
   }
 });
 
-// **[DELETE] Xóa một todo**
-app.delete('/api/todos/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const connection = await connectToDatabase();
-    const request = new tedious.Request(
-      `DELETE FROM dbo.Luna1002 WHERE id = @id`,
-      (err, rowCount) => {
-        if (err) {
-          console.error('Lỗi xóa todo:', err);
-          res.status(500).json({ error: 'Lỗi xóa todo' });
-        } else {
-          res.json({ message: 'Todo đã được xóa' });
-        }
-        connection.close();
-      }
-    );
-    request.addParameter('id', tedious.TYPES.Int, id);
-    connection.execSql(request);
-  } catch (error) {
-    console.error("Lỗi kết nối hoặc xóa todo:", error);
-    res.status(500).json({ error: 'Lỗi kết nối hoặc xóa todo' });
-  }
-});
 
 // Khởi động server
 app.listen(port, () => {
